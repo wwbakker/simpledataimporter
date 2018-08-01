@@ -7,9 +7,8 @@ import akka.NotUsed
 import akka.actor.ActorSystem
 import akka.http.scaladsl.Http
 import akka.http.scaladsl.model.HttpRequest
-import akka.stream.scaladsl.{Compression, FileIO, Flow, Source}
+import akka.stream.scaladsl.{Compression, FileIO, Flow, Framing, Source}
 import akka.util.ByteString
-import cats.kernel.Monoid
 
 import scala.concurrent.ExecutionContext
 
@@ -58,6 +57,19 @@ object ImportStatus {
   implicit class ImportResultOps[A, B](b : B)(implicit ev: ImportResult[A, B]) {
     def combine(a: ProcessItemResult[A]) : B = ev.combine(b, a)
   }
+
+
+  trait CsvImporter[A] extends Importer[A] {
+    def csvFlow : Flow[ByteString, List[String], NotUsed] =  Flow.fromFunction[ByteString, List[String]]
+
+  }
+
+  trait Importer[A] {
+    def flow : Flow[ByteString, ProcessItemResult[A], NotUsed]
+  }
+
+
+
 }
 
 
