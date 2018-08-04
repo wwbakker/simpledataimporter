@@ -7,7 +7,7 @@ import akka.NotUsed
 import akka.actor.ActorSystem
 import akka.http.scaladsl.Http
 import akka.http.scaladsl.model.HttpRequest
-import akka.stream.scaladsl.{Compression, FileIO, Flow, Framing, Source}
+import akka.stream.scaladsl.{ Compression, FileIO, Flow, Framing, Source }
 import akka.util.ByteString
 
 import scala.concurrent.ExecutionContext
@@ -29,11 +29,10 @@ trait DataImportService {
           else
             Source.failed[ByteString](
               new Exception(s"Could not retrieve data from '${uri.toString}'. " +
-                s"Server responded with ${httpResponse.status.defaultMessage()}"))
-        ))
+                s"Server responded with ${httpResponse.status.defaultMessage()}"))))
   }
 
-  def uncompressed(gzipped : Boolean) : Flow[ByteString, ByteString, NotUsed] =
+  def uncompressed(gzipped: Boolean): Flow[ByteString, ByteString, NotUsed] =
     if (gzipped)
       Compression.gunzip()
     else
@@ -45,33 +44,29 @@ trait DataImportService {
 object ImportStatus {
   // Typeclasses and implementations
   trait ProcessItemResult[A] {
-    def friendlyMessage(a : A) : String
+    def friendlyMessage(a: A): String
   }
-  implicit class ProcessItemResultOps[A](a : A)(implicit ev: ProcessItemResult[A]) {
-    def friendlyMessage : String = ev.friendlyMessage(a)
-  }
-
-  trait ImportResult[A, B]{
-    def combine(b : B, processItemResult: ProcessItemResult[A]) : B
-  }
-  implicit class ImportResultOps[A, B](b : B)(implicit ev: ImportResult[A, B]) {
-    def combine(a: ProcessItemResult[A]) : B = ev.combine(b, a)
+  implicit class ProcessItemResultOps[A](a: A)(implicit ev: ProcessItemResult[A]) {
+    def friendlyMessage: String = ev.friendlyMessage(a)
   }
 
+  trait ImportResult[A, B] {
+    def combine(b: B, processItemResult: ProcessItemResult[A]): B
+  }
+  implicit class ImportResultOps[A, B](b: B)(implicit ev: ImportResult[A, B]) {
+    def combine(a: ProcessItemResult[A]): B = ev.combine(b, a)
+  }
 
   trait CsvImporter[A] extends Importer[A] {
-    def csvFlow : Flow[ByteString, List[String], NotUsed] =  Flow.fromFunction[ByteString, List[String]]
+    def maximumLineLengthInBytes: Int = 10 * 1024 * 1024 * 1024 // 10MB
+    //    def csvFlow : Flow[ByteString, List[String], NotUsed] =
+    //      NewlineCompatibleCsvSplitter.flow(maximumLineLengthInBytes, false).map(_.utf8String)
 
   }
 
   trait Importer[A] {
-    def flow : Flow[ByteString, ProcessItemResult[A], NotUsed]
+    def flow: Flow[ByteString, ProcessItemResult[A], NotUsed]
   }
 
-
-
 }
-
-
-
 
