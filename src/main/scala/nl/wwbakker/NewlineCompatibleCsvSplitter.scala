@@ -59,45 +59,47 @@ class NewlineCompatibleCsvSplitterGraphStage(val maximumLineBytes: Int, val allo
     }
 
     @tailrec
-    def indexOfFirstSeperatorNotInQuotes(currentIndex: Int, isInsideQuotes: Boolean = false): Int =
+    def indexOfFirstSeparatorNotInQuotes(currentIndex: Int, isInsideQuotes: Boolean = false): Option[Int] =
       if (buffer.length <= currentIndex)
-        -1
+        None
       else if (!isInsideQuotes && buffer(currentIndex) == separatorByte.head)
-        currentIndex
+        Some(currentIndex)
       else
-        indexOfFirstSeperatorNotInQuotes(currentIndex + 1, if (buffer(currentIndex) == '\"') !isInsideQuotes else isInsideQuotes)
+        indexOfFirstSeparatorNotInQuotes(currentIndex + 1, if (buffer(currentIndex) == '\"') !isInsideQuotes else isInsideQuotes)
 
     @tailrec
     private def doParse(): Unit = {
-      val possibleMatchPos = indexOfFirstSeperatorNotInQuotes(nextPossibleMatch)
-      if (possibleMatchPos > maximumLineBytes)
-        failStage(new FramingException(s"Read ${buffer.size} bytes which is more than $maximumLineBytes without reading a line seperator"))
-      else if (possibleMatchPos == -1)
-        if (buffer.size > maximumLineBytes)
-          failStage(new FramingException(s"Read ${buffer.size} bytes which is more than $maximumLineBytes without reading a line seperator"))
-        else {
-          // no matching character, we need to accumulate more bytes into the buffer
-          nextPossibleMatch = buffer.size
-          tryPull()
-        }
-      else if (possibleMatchPos + separatorByte.size > buffer.size) {
-        // We have found a possible match (we found the terminator) but we don't have enough bytes yet.
-        // We remember the position and try again
-        nextPossibleMatch = possibleMatchPos
-        tryPull()
-      } else if (buffer.slice(possibleMatchPos, possibleMatchPos + separatorByte.size) == separatorByte) {
-        // Found a match
-        val parsedFrame = buffer.slice(0, possibleMatchPos).compact
-        buffer = buffer.drop(possibleMatchPos + separatorByte.size).compact
-        nextPossibleMatch = 0
-        if (isClosed(in) && buffer.isEmpty) {
-          push(out, parsedFrame)
-          completeStage()
-        } else push(out, parsedFrame)
-      } else {
-        // possibleMatchPos was not actually a match
-        nextPossibleMatch += 1
-        doParse()
+      indexOfFirstSeparatorNotInQuotes(nextPossibleMatch) match {
+        case None =>
+          if (buffer.size > maximumLineBytes)
+            failStage(new FramingException(s"Read ${buffer.size} bytes which is more than $maximumLineBytes without reading a line seperator"))
+          else {
+            // no matching character, we need to accumulate more bytes into the buffer
+            nextPossibleMatch = buffer.size
+            tryPull()
+          }
+        case Some(possibleMatchPos) =>
+          if (possibleMatchPos > maximumLineBytes)
+            failStage(new FramingException(s"Read ${buffer.size} bytes which is more than $maximumLineBytes without reading a line seperator"))
+          else if (possibleMatchPos + separatorByte.size > buffer.size) {
+            // We have found a possible match (we found the terminator) but we don't have enough bytes yet.
+            // We remember the position and try again
+            nextPossibleMatch = possibleMatchPos
+            tryPull()
+          } else if (buffer.slice(possibleMatchPos, possibleMatchPos + separatorByte.size) == separatorByte) {
+            // Found a match
+            val parsedFrame = buffer.slice(0, possibleMatchPos).compact
+            buffer = buffer.drop(possibleMatchPos + separatorByte.size).compact
+            nextPossibleMatch = 0
+            if (isClosed(in) && buffer.isEmpty) {
+              push(out, parsedFrame)
+              completeStage()
+            } else push(out, parsedFrame)
+          } else {
+            // possibleMatchPos was not actually a match
+            nextPossibleMatch += 1
+            doParse()
+          }
       }
     }
     setHandlers(in, out, this)
